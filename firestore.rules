@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── دوال مساعدة ─────────────────────────────────────────────────────────
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isLoggedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(uid) {
+      return isLoggedIn() && request.auth.uid == uid;
+    }
+
+    // ── الشباب ──────────────────────────────────────────────────────────────
+    match /students/{studentId} {
+      allow read:  if isLoggedIn();
+      allow write: if isLoggedIn();   // أي خادم يضيف/يعدّل
+      allow delete: if isAdmin();     // المدير فقط يحذف
+    }
+
+    // ── الحضور ──────────────────────────────────────────────────────────────
+    match /attendance/{recordId} {
+      allow read:  if isLoggedIn();
+      allow write: if isLoggedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ── الافتقاد ─────────────────────────────────────────────────────────────
+    match /visits/{visitId} {
+      allow read:  if isLoggedIn();
+      allow write: if isLoggedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ── الرحلات ──────────────────────────────────────────────────────────────
+    match /trips/{tripId} {
+      allow read:  if isLoggedIn();
+      allow write: if isLoggedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ── حجوزات الرحلات ───────────────────────────────────────────────────────
+    match /trip_bookings/{bookingId} {
+      allow read:  if isLoggedIn();
+      allow write: if isLoggedIn();
+      allow delete: if isLoggedIn(); // أي خادم يلغي الحجز
+    }
+
+    // ── توزيع الكلمة واللحن ──────────────────────────────────────────────────
+    match /schedule_assignments/{assignId} {
+      allow read:  if isLoggedIn();
+      allow write: if isAdmin();     // المدير فقط يضيف/يعدّل التوزيع
+      allow delete: if isAdmin();
+    }
+
+    // ── الإشعارات المجدوَلة (تقرأها Cloud Function) ───────────────────────────
+    match /pending_notifications/{notifId} {
+      allow read:  if isLoggedIn();   // الفلترة حسب toUid تتم من الـ client
+      allow create: if isLoggedIn();  // أي خادم يضيف إشعار
+      allow update: if isLoggedIn() &&
+                      resource.data.toUid == request.auth.uid;   // صاحب الإشعار يعدّل
+      allow delete: if isAdmin() ||
+                     (isLoggedIn() && resource.data.toUid == request.auth.uid);
+    }
+
+    // ── المستخدمون/الخدام ────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read:  if isLoggedIn();
+      allow update: if isOwner(userId) || isAdmin();  // كل خادم يعدّل بياناته أو المدير
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── الإعدادات المشتركة ───────────────────────────────────────────────────
+    match /app_settings/{doc} {
+      allow read:  if isLoggedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
